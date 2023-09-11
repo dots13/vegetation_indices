@@ -4,24 +4,17 @@ import geemap.foliumap as geemap
 
 st.set_page_config(layout="wide")
 
+m = geemap.Map()
+dem = ee.Image('USGS/SRTMGL1_003')
 
+vis_params = {
+    'min': 0,
+    'max': 4000,
+    'palette': ['006633', 'E5FFCC', '662A00', 'D8D8D8', 'F5F5F5']}
 
+m.addLayer(dem, vis_params, 'SRTM DEM', True, 1)
+m.addLayerControl()
 
-def search_data():
-
-    # st.header("Search Earth Engine Data Catalog")
-
-    Map = geemap.Map()
-    aoi = ee.FeatureCollection('FAO/GAUL/2015/level1').filter(ee.Filter.eq('ADM1_NAME', 'Utrecht')).geometry()
-    Map.setOptions('SATELLITE')
-    Map.centerObject(aoi, 10)
-    Map.to_streamlit()
-
-def app():
-    st.title("Earth Engine Data Catalog")
-
-    search_data()
-
-
-app()
+# call to render Folium map in Streamlit
+folium_static(m)
 
