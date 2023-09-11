@@ -1,6 +1,6 @@
 import numpy as np
 import ee
-ee.Initialize()
+
 import streamlit as st
 import geemap.foliumap as geemap
 
