@@ -1,133 +1,158 @@
-import numpy as np
 import ee
-
 import streamlit as st
 import geemap.foliumap as geemap
 
 st.set_page_config(layout="wide")
-aoi = ee.FeatureCollection('FAO/GAUL/2015/level1').filter(ee.Filter.eq('ADM1_NAME','Utrecht')).geometry()
 
-rgbVis = {
-  'min': 0.0,
-  'max': 0.3,
-  'bands': ['B4', 'B3', 'B2'],
-}
+st.sidebar.info(
+    """
+    - Web App URL: <https://streamlit.geemap.org>
+    - GitHub repository: <https://github.com/giswqs/streamlit-geospatial>
+    """
+)
 
-color = ['FFFFFF', 'CE7E45', 'DF923D', 'F1B555', 'FCD163', '99B718',
-               '74A901', '66A000', '529400', '3E8601', '207401', '056201',
-               '004C00', '023B01', '012E01', '011D01', '011301']
-pallete = {"min":0, "max":1, 'palette':color}
-
-colorizedVis = {
-  'min': 0.0,
-  'max': 1.0,
-  'palette': ['0000ff', '00ffff', 'ffff00', 'ff0000', 'ffffff'],
-};
-
-def getNDVI(image):   
-    
-    # Normalized difference vegetation index (NDVI)
-    ndvi = image.normalizedDifference(['B8','B4']).rename("NDVI")
-    image = image.addBands(ndvi)
-
-    return image
-    
-def getNDMI(image):
-    
-    # Normalized Difference Moisture Index (NDMI)
-    NDMI = image.normalizedDifference(['B8','B11']).rename("NDMI")
-    image = image.addBands(NDMI)
-
-    return image
-
-layers = {
-        "NDMI": 'NDMI',
-        "NDVI": 'NDVI',
-        "f1": 'hz',
-    }
-options = list(layers.keys())
-    
-agg_fun = {
-        "min": 'val1',
-        "max": 'val2',
-        "mean": 'hz',
-        }
-
-options_agg = list(agg_fun.keys())
+st.sidebar.title("Contact")
+st.sidebar.info(
+    """
+    Qiusheng Wu: <https://wetlands.io>
+    [GitHub](https://github.com/giswqs) | [Twitter](https://twitter.com/giswqs) | [YouTube](https://www.youtube.com/c/QiushengWu) | [LinkedIn](https://www.linkedin.com/in/qiushengwu)
+    """
+)
 
 
-col1, col2 = st.columns([1, 1])
+def nlcd():
 
-subcol1, subcol2 = col1.columns(2)
+    # st.header("National Land Cover Database (NLCD)")
 
-subcolA, subcolB = col1.columns(2)
+    row1_col1, row1_col2 = st.columns([3, 1])
+    width = 950
+    height = 600
 
-left = subcolA.selectbox("Select a left layer", options, index=1)
-right = subcolB.selectbox("Select a left layer", options_agg, index=1)
+    Map = geemap.Map(center=[40, -100], zoom=4)
 
-with subcol1.expander("Select year and month", True):
-    selected_year = subcolA.slider(
-                        "Year",
-                        2020,
-                        2023,
-                        value=2021,
-                        step=1,
-                    )
-    selected_month = subcolB.slider(
-                        "Month",
-                        min_value=1,
-                        max_value=12,
-                        value=1,
-                        step=1,
-                    )
-                    
-                    
+    # Select the seven NLCD epoches after 2000.
+    years = ["2001", "2004", "2006", "2008", "2011", "2013", "2016", "2019"]
 
-def maskS2clouds(image):
-    
-    qa = image.select('QA60')
-    cloudBitMask = 1 << 10
-    cirrusBitMask = 1 << 11
-    mask = qa.bitwiseAnd(cloudBitMask).eq(0).And(
-             qa.bitwiseAnd(cirrusBitMask).eq(0))
-    
-    return image.updateMask(mask).divide(10000).copyProperties(image)
+    # Get an NLCD image by year.
+    def getNLCD(year):
+        # Import the NLCD collection.
+        dataset = ee.ImageCollection("USGS/NLCD_RELEASES/2019_REL/NLCD")
 
+        # Filter the collection by year.
+        nlcd = dataset.filter(ee.Filter.eq("system:index", year)).first()
 
-palette_dic = {
-    'NDVI' : pallete,
-    'NDMI' : colorizedVis
-}
+        # Select the land cover band.
+        landcover = nlcd.select("landcover")
+        return landcover
 
-left_img = ee.ImageCollection('COPERNICUS/S2')\
-                .filter(ee.Filter.calendarRange(selected_year, selected_year, 'year'))\
-                .filter(ee.Filter.calendarRange(selected_month, selected_month,'month'))\
-                .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20)) \
-                .map(maskS2clouds) \
-                .filterBounds(aoi)\
-                .map(getNDVI)\
-                .map(getNDMI)\
-                .median()
-                
-right_img = ee.ImageCollection('COPERNICUS/S2')\
-                .filter(ee.Filter.calendarRange(selected_year, selected_year, 'year'))\
-                .filter(ee.Filter.calendarRange(selected_month, selected_month,'month'))\
-                .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20)) \
-                .map(maskS2clouds) \
-                .filterBounds(aoi)\
-                .map(getNDVI)\
-                .map(getNDMI)\
-                .max()
+    with row1_col2:
+        selected_year = st.multiselect("Select a year", years)
+        add_legend = st.checkbox("Show legend")
+
+    if selected_year:
+        for year in selected_year:
+            Map.addLayer(getNLCD(year), {}, "NLCD " + year)
+
+        if add_legend:
+            Map.add_legend(
+                legend_title="NLCD Land Cover Classification", builtin_legend="NLCD"
+            )
+        with row1_col1:
+            Map.to_streamlit(width=width, height=height)
+
+    else:
+        with row1_col1:
+            Map.to_streamlit(width=width, height=height)
 
 
-utrecht_map = geemap.Map()
-utrecht_map.setOptions('SATELLITE')
-utrecht_map.centerObject(aoi, 10)
-left_layer = geemap.ee_tile_layer(left_img.clip(aoi), rgbVis, 'RGB')
-right_layer = geemap.ee_tile_layer(right_img.clip(aoi).select(left), palette_dic[left], left)
-utrecht_map.split_map(left_layer, right_layer)
+def search_data():
 
-with col1:
-    utrecht_map.to_streamlit(height=450)
+    # st.header("Search Earth Engine Data Catalog")
 
-    
+    Map = geemap.Map()
+
+    if "ee_assets" not in st.session_state:
+        st.session_state["ee_assets"] = None
+    if "asset_titles" not in st.session_state:
+        st.session_state["asset_titles"] = None
+
+    col1, col2 = st.columns([2, 1])
+
+    dataset = None
+    with col2:
+        keyword = st.text_input(
+            "Enter a keyword to search (e.g., elevation)", "")
+        if keyword:
+            ee_assets = geemap.search_ee_data(keyword)
+            asset_titles = [x["title"] for x in ee_assets]
+            asset_types = [x["type"] for x in ee_assets]
+
+            translate = {
+                "image_collection": "ee.ImageCollection('",
+                "image": "ee.Image('",
+                "table": "ee.FeatureCollection('",
+                "table_collection": "ee.FeatureCollection('",
+            }
+
+            dataset = st.selectbox("Select a dataset", asset_titles)
+            if len(ee_assets) > 0:
+                st.session_state["ee_assets"] = ee_assets
+                st.session_state["asset_titles"] = asset_titles
+
+            if dataset is not None:
+                with st.expander("Show dataset details", True):
+                    index = asset_titles.index(dataset)
+
+                    html = geemap.ee_data_html(
+                        st.session_state["ee_assets"][index])
+                    html = html.replace("\n", "")
+                    st.markdown(html, True)
+
+                ee_id = ee_assets[index]["id"]
+                uid = ee_assets[index]["uid"]
+                st.markdown(f"""**Earth Engine Snippet:** `{ee_id}`""")
+                ee_asset = f"{translate[asset_types[index]]}{ee_id}')"
+                vis_params = st.text_input(
+                    "Enter visualization parameters as a dictionary", {}
+                )
+                layer_name = st.text_input("Enter a layer name", uid)
+                button = st.button("Add dataset to map")
+                if button:
+                    vis = {}
+                    try:
+                        if vis_params.strip() == "":
+                            # st.error("Please enter visualization parameters")
+                            vis_params = "{}"
+                        vis = eval(vis_params)
+                        if not isinstance(vis, dict):
+                            st.error(
+                                "Visualization parameters must be a dictionary")
+                        try:
+                            Map.addLayer(eval(ee_asset), vis, layer_name)
+                        except Exception as e:
+                            st.error(f"Error adding layer: {e}")
+                    except Exception as e:
+                        st.error(f"Invalid visualization parameters: {e}")
+
+            with col1:
+                Map.to_streamlit()
+        else:
+            with col1:
+                Map.to_streamlit()
+
+
+def app():
+    st.title("Earth Engine Data Catalog")
+
+    apps = ["Search Earth Engine Data Catalog",
+            "National Land Cover Database (NLCD)"]
+
+    selected_app = st.selectbox("Select an app", apps)
+
+    if selected_app == "National Land Cover Database (NLCD)":
+        nlcd()
+    elif selected_app == "Search Earth Engine Data Catalog":
+        search_data()
+
+
+app()
