@@ -5,7 +5,6 @@ import streamlit as st
 import geemap.foliumap as geemap
 
 st.set_page_config(layout="wide")
-geemap.ee_initialize()
 aoi = ee.FeatureCollection('FAO/GAUL/2015/level1').filter(ee.Filter.eq('ADM1_NAME','Utrecht')).geometry()
 
 rgbVis = {
